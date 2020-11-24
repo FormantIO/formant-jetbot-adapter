@@ -12,7 +12,7 @@ from formant.sdk.agent.v1 import Client as FormantClient
 MAX_SPEED = 0.7
 MIN_SPEED = 0.1
 START_SPEED = 0.1
-SPEED_DEADZONE = 0.275
+SPEED_DEADZONE = 0.25
 SPEED_INCREMENT = 0.025
 ANGULAR_REDUCTION = 0.50
 GST_STRING = 'nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)NV12, framerate=(fraction)21/1 ! nvvidconv ! video/x-raw, width=(int)1280, height=(int)720, format=(string)BGRx ! videoconvert ! appsink'
@@ -48,7 +48,7 @@ class FormantJetBotAdapter():
         while True:
             #self.fclient.post_numeric("speed", self.speed)
             self.fclient.post_numericset(
-                "speed",
+                "Speed",
                 {
                     "speed": (self.speed + SPEED_DEADZONE, "m/s")
                 },
@@ -68,7 +68,7 @@ class FormantJetBotAdapter():
                 print("ERROR: Encoding failed")
             
             try:
-                self.fclient.post_image("camera", encoded)
+                self.fclient.post_image("Camera", encoded)
             except:
                 print("ERROR: Camera ingestion failed")
 
@@ -123,34 +123,34 @@ class FormantJetBotAdapter():
             self._handle_decrease_speed()
 
     def _handle_nudge_forward(self):
-        self.fclient.post_text("commands", "nudge forward")
+        self.fclient.post_text("Commands", "nudge forward")
         self.robot.forward(self.speed)
         time.sleep(0.5)
         self.robot.stop()
 
     def _handle_nudge_backward(self):
-        self.fclient.post_text("commands", "nudge backward")
+        self.fclient.post_text("Commands", "nudge backward")
         self.robot.backward(self.speed)
         time.sleep(0.5)
         self.robot.stop()
 
     def _handle_start(self):
-        self.fclient.post_text("commands", "start")
+        self.fclient.post_text("Commands", "start")
         self.robot.forward(self.speed)
 
     def _handle_stop(self):
-        self.fclient.post_text("commands", "stop")
+        self.fclient.post_text("Commands", "stop")
         self.robot.stop()
 
     def _handle_increase_speed(self):
-        self.fclient.post_text("commands", "increase speed")
+        self.fclient.post_text("Commands", "increase speed")
         if self.speed + SPEED_INCREMENT <= MAX_SPEED:
             self.speed += SPEED_INCREMENT
         else:
             self.speed = MAX_SPEED
     
     def _handle_decrease_speed(self):
-        self.fclient.post_text("commands", "decrease speed")
+        self.fclient.post_text("Commands", "decrease speed")
         if self.speed - SPEED_INCREMENT >= MIN_SPEED:
             self.speed -= SPEED_INCREMENT
         else:
