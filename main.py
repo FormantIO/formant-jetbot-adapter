@@ -1,77 +1,149 @@
 import cv2
 import time
-import thread
 import random
+import logging
+import threading
 import traitlets
 import numpy as np
 from jetbot import Robot, Camera, Heartbeat
 from Adafruit_MotorHAT import Adafruit_MotorHAT
 from formant.sdk.agent.v1 import Client as FormantClient
 
+DEADZONE = 0.15
+MAX_SPEED = 0.75
+MIN_SPEED = 0.175
+START_SPEED = 0.25
+SPEED_INCREMENT = 0.025
+GST_STRING = 'nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)NV12, framerate=(fraction)21/1 ! nvvidconv ! video/x-raw, width=(int)1280, height=(int)720, format=(string)BGRx ! videoconvert ! appsink'
 
-DEADZONE = 0.05
-GST_STRING = 'nvarguscamerasrc ! video/x-raw(memory:NVMM), width=816, height=616, format=(string)NV12, framerate=(fraction)21/1 ! nvvidconv ! video/x-raw, width=(int)1280, height=(int)720, format=(string)BGRx ! videoconvert ! appsink'
-NUMPY_TYPE_TO_CVTYPE = {'uint8': '8U', 'int8': '8S', 'uint16': '16U', 'int16': '16S', 'int32': '32S', 'float32': '32F', 'float64': '64F'}
-CVTYPE_TO_NAME = {}
 
 class FormantJetBotAdapter():
     def __init__(self):
-        print("INFO: Starting the Formant JetBot Adapter...")
+        print("INFO: Starting Formant JetBot Adapter")
+
+        # Set global params
+        self.speed = START_SPEED
+
+        # Create clients
+        self.robot = Robot()
         self.fclient = FormantClient(ignore_throttled=True, ignore_unavailable=True)
 
-        fclient.register_teleop_callback(
-            handle_teleop, ["joystick", "buttons"]
+        self.fclient.register_teleop_callback(
+            self.handle_teleop, ["Joystick", "Buttons"]
         )
 
-        # Start the camera thread
+        # Create the speed publisher
         try:
-            thread.start_new_thread(publish_camera_feed)
+            speed_thread = threading.Thread(target=self.publish_speed, daemon=True)
+            speed_thread.start()
+            print("INFO: Speed thread started")
         except:
-            print("ERROR: Unable to start thread")
+            print("ERROR: Unable to start speed thread")
+
+        # Start the camera feed
+        self.publish_camera_feed()
+
+    def publish_speed(self):
+        while True:
+            #self.fclient.post_numeric("speed", self.speed)
+            self.fclient.post_numericset(
+                "speed",
+                {
+                    "speed": (self.speed, "m/s")
+                },
+            )
+            time.sleep(1.0)
 
     def publish_camera_feed(self):
-        #camera = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER)
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER)
         if cap is None:
             sys.exit()
 
         while True:
             _, image = cap.read()
-            encoded = cv2.imencode(".jpg", image)[1].tostring()
-            self.fclient.post_image("camera", encoded)
+            try:
+                encoded = cv2.imencode(".jpg", image)[1].tostring()
+            except:
+                print("ERROR: Encoding failed")
+            
+            try:
+                self.fclient.post_image("camera", encoded)
+            except:
+                print("ERROR: Camera ingestion failed")
 
     def handle_teleop(self, control_datapoint):
-    if control_datapoint.stream == "joystick":
-        handle_joystick(control_datapoint)
-    elif control_datapoint.stream == "buttons":
-        handle_buttons(control_datapoint)
+        #print("got teleop message:", control_datapoint)
+        if control_datapoint.stream == "Joystick":
+            self.handle_joystick(control_datapoint)
+        elif control_datapoint.stream == "Buttons":
+            self.handle_buttons(control_datapoint)
 
-    def handle_joystick(self, _):
-        print(_.stream)
-        print(_.timestamp)
-        print(_.twist.linear.x)
-        print(_.twist.angular.z)
+    def handle_joystick(self, joystick):
+        left_motor_value = 0.0
+        right_motor_value = 0.0
+
+        # Add contributions from the joystick
+        # if _.twist.angular.z >= DEADZONE:
+        #     left_motor_value = self.speed * _.twist.angular.z
+        #     right_motor_value = -self.speed * _.twist.angular.z
+        # elif _.twist.angular.z <= DEADZONE: 
+        left_motor_value = self.speed * joystick.twist.angular.z
+        right_motor_value = -self.speed * joystick.twist.angular.z
+
+        left_motor_value += self.speed * joystick.twist.linear.x
+        right_motor_value += self.speed * joystick.twist.linear.x
+
+        # Set the motor values
+        self.robot.left_motor.value = left_motor_value
+        self.robot.right_motor.value = right_motor_value
 
     def handle_buttons(self, _):
-        print(_.stream)
-        print(_.timestamp)
-        print(_.bitset.bits)
+        if _.bitset.bits[0].key == "nudge forward":
+            self._handle_nudge_forward()
+        elif _.bitset.bits[0].key == "nudge backward":
+            self._handle_nudge_backward()
+        elif _.bitset.bits[0].key == "start":
+            self._handle_start()
+        elif _.bitset.bits[0].key == "stop":
+            self._handle_stop()
+        elif _.bitset.bits[0].key == "speed +":
+            self._handle_increase_speed()
+        elif _.bitset.bits[0].key == "speed -":
+            self._handle_decrease_speed()
 
-    def _handle_stop_motors(self, msg):
-        print("stop motors")
-        self.robot.stop()
-
-    def _handle_step_forwards(self, msg):
-        print("step forwards")
-        self.robot.forward(0.25)
+    def _handle_nudge_forward(self):
+        self.fclient.post_text("commands", "nudge forward")
+        self.robot.forward(self.speed)
         time.sleep(0.5)
         self.robot.stop()
 
-    def _handle_step_backwards(self, msg):
-        print("step backwards")
-        self.robot.backwards(0.25)
+    def _handle_nudge_backward(self):
+        self.fclient.post_text("commands", "nudge backward")
+        self.robot.backward(self.speed)
         time.sleep(0.5)
         self.robot.stop()
+
+    def _handle_start(self):
+        self.fclient.post_text("commands", "start")
+        self.robot.forward(self.speed)
+
+    def _handle_stop(self):
+        self.fclient.post_text("commands", "stop")
+        self.robot.stop()
+
+    def _handle_increase_speed(self):
+        self.fclient.post_text("commands", "increase speed")
+        if self.speed + SPEED_INCREMENT <= MAX_SPEED:
+            self.speed += SPEED_INCREMENT
+        else:
+            self.speed = MAX_SPEED
+    
+    def _handle_decrease_speed(self):
+        self.fclient.post_text("commands", "decrease speed")
+        if self.speed - SPEED_INCREMENT >= MIN_SPEED:
+            self.speed -= SPEED_INCREMENT
+        else:
+            self.speed = MIN_SPEED
 
 
 if __name__=="__main__":
