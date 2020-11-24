@@ -9,12 +9,12 @@ from jetbot import Robot, Camera, Heartbeat
 from Adafruit_MotorHAT import Adafruit_MotorHAT
 from formant.sdk.agent.v1 import Client as FormantClient
 
-DEADZONE = 0.15
-MAX_SPEED = 0.75
-MIN_SPEED = 0.175
-START_SPEED = 0.25
+MAX_SPEED = 0.7
+MIN_SPEED = 0.1
+START_SPEED = 0.1
+SPEED_DEADZONE = 0.275
 SPEED_INCREMENT = 0.025
-ANGULAR_REDUCTION = 0.5
+ANGULAR_REDUCTION = 0.50
 GST_STRING = 'nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)NV12, framerate=(fraction)21/1 ! nvvidconv ! video/x-raw, width=(int)1280, height=(int)720, format=(string)BGRx ! videoconvert ! appsink'
 
 
@@ -50,7 +50,7 @@ class FormantJetBotAdapter():
             self.fclient.post_numericset(
                 "speed",
                 {
-                    "speed": (self.speed, "m/s")
+                    "speed": (self.speed + SPEED_DEADZONE, "m/s")
                 },
             )
             time.sleep(1.0)
@@ -90,9 +90,23 @@ class FormantJetBotAdapter():
         left_motor_value += self.speed * joystick.twist.linear.x
         right_motor_value += self.speed * joystick.twist.linear.x
 
+        # Improve the deadzone
+        # TODO: turn this into a circle instead of a square
+        if left_motor_value > 0:
+            left_motor_value += SPEED_DEADZONE
+        elif left_motor_value < 0:
+            left_motor_value -= SPEED_DEADZONE
+        
+        if right_motor_value > 0:
+            right_motor_value += SPEED_DEADZONE
+        elif right_motor_value < 0:
+            right_motor_value -= SPEED_DEADZONE
+
         # Set the motor values
         self.robot.left_motor.value = left_motor_value
         self.robot.right_motor.value = right_motor_value
+
+        print(left_motor_value, right_motor_value)
 
     def handle_buttons(self, _):
         if _.bitset.bits[0].key == "nudge forward":
