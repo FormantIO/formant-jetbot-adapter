@@ -14,6 +14,7 @@ MAX_SPEED = 0.75
 MIN_SPEED = 0.175
 START_SPEED = 0.25
 SPEED_INCREMENT = 0.025
+ANGULAR_REDUCTION = 0.5
 GST_STRING = 'nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)NV12, framerate=(fraction)21/1 ! nvvidconv ! video/x-raw, width=(int)1280, height=(int)720, format=(string)BGRx ! videoconvert ! appsink'
 
 
@@ -82,13 +83,9 @@ class FormantJetBotAdapter():
         left_motor_value = 0.0
         right_motor_value = 0.0
 
-        # Add contributions from the joystick
-        # if _.twist.angular.z >= DEADZONE:
-        #     left_motor_value = self.speed * _.twist.angular.z
-        #     right_motor_value = -self.speed * _.twist.angular.z
-        # elif _.twist.angular.z <= DEADZONE: 
-        left_motor_value = self.speed * joystick.twist.angular.z
-        right_motor_value = -self.speed * joystick.twist.angular.z
+        # Add contributions from the joysticks
+        left_motor_value = self.speed * joystick.twist.angular.z * ANGULAR_REDUCTION
+        right_motor_value = -self.speed * joystick.twist.angular.z * ANGULAR_REDUCTION
 
         left_motor_value += self.speed * joystick.twist.linear.x
         right_motor_value += self.speed * joystick.twist.linear.x
