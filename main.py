@@ -84,14 +84,14 @@ class FormantJetBotAdapter():
         right_motor_value = 0.0
 
         # Add contributions from the joysticks
-        left_motor_value = self.speed * joystick.twist.angular.z * ANGULAR_REDUCTION
-        right_motor_value = -self.speed * joystick.twist.angular.z * ANGULAR_REDUCTION
+        # TODO: turn this into a circle, not a square
+        left_motor_value += self.speed * joystick.twist.angular.z * ANGULAR_REDUCTION
+        right_motor_value += -self.speed * joystick.twist.angular.z * ANGULAR_REDUCTION
 
         left_motor_value += self.speed * joystick.twist.linear.x
         right_motor_value += self.speed * joystick.twist.linear.x
 
         # Improve the deadzone
-        # TODO: turn this into a circle instead of a square
         if left_motor_value > 0:
             left_motor_value += SPEED_DEADZONE
         elif left_motor_value < 0:
@@ -106,7 +106,7 @@ class FormantJetBotAdapter():
         self.robot.left_motor.value = left_motor_value
         self.robot.right_motor.value = right_motor_value
 
-        print(left_motor_value, right_motor_value)
+        #print(left_motor_value, right_motor_value)
 
     def handle_buttons(self, _):
         if _.bitset.bits[0].key == "nudge forward":
