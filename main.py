@@ -29,6 +29,11 @@ class FormantJetBotAdapter():
         self.robot = Robot()
         self.fclient = FormantClient(ignore_throttled=True, ignore_unavailable=True)
 
+        self.fclient.create_event(
+            "Formant JetBot adapter online",
+            notify=False,
+        )
+        
         self.fclient.register_teleop_callback(
             self.handle_teleop, ["Joystick", "Buttons"]
         )
@@ -40,6 +45,14 @@ class FormantJetBotAdapter():
             print("INFO: Speed thread started")
         except:
             print("ERROR: Unable to start speed thread")
+
+        # Create the location publisher
+        try:
+            location_thread = threading.Thread(target=self.publish_location, daemon=True)
+            location_thread.start()
+            print("INFO: Location thread started")
+        except:
+            print("ERROR: Unable to start location thread")
 
         # Start the camera feed
         self.publish_camera_feed()
@@ -54,6 +67,16 @@ class FormantJetBotAdapter():
                 },
             )
             time.sleep(1.0)
+
+    def publish_location(self):
+        # TODO: get location input from user on setup.sh run
+        while True:
+            self.fclient.post_geolocation(
+                "Location", 
+                40.4585351, # Latitude
+                -79.932331  # Longitude
+            )
+            time.sleep(10.0)
 
     def publish_camera_feed(self):
         cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER)
