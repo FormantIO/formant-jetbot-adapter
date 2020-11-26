@@ -3,19 +3,29 @@ import time
 import random
 import logging
 import threading
-import traitlets
+import collections
 import numpy as np
+from statistics import mean, stdev
 from jetbot import Robot, Camera, Heartbeat
 from Adafruit_MotorHAT import Adafruit_MotorHAT
 from formant.sdk.agent.v1 import Client as FormantClient
 
-MAX_SPEED = 0.7
-MIN_SPEED = 0.1
-START_SPEED = 0.1
-SPEED_DEADZONE = 0.25
-SPEED_INCREMENT = 0.025
-ANGULAR_REDUCTION = 0.50
-GST_STRING = 'nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)NV12, framerate=(fraction)21/1 ! nvvidconv ! video/x-raw, width=(int)1280, height=(int)720, format=(string)BGRx ! videoconvert ! appsink'
+DEFAULT_MAX_SPEED = 0.7
+DEFAULT_MIN_SPEED = 0.1
+DEFAULT_START_SPEED = 0.1
+DEFAULT_SPEED_DEADZONE = 0.25
+DEFAULT_SPEED_INCREMENT = 0.025
+DEFAULT_ANGULAR_REDUCTION = 0.50
+DEFAULT_LATITUDE = 41.322937   # The pyramid of Enver Hoxha
+DEFAULT_LONGITUDE = 19.820896
+DEFAULT_GST_STRING = (
+    "nvarguscamerasrc ! "
+    "video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)NV12, framerate=(fraction)21/1 ! "
+    "nvvidconv ! "
+    "video/x-raw, width=(int)1280, height=(int)720, format=(string)BGRx ! "
+    "videoconvert ! "
+    "appsink "
+)
 
 
 class FormantJetBotAdapter():
@@ -23,15 +33,36 @@ class FormantJetBotAdapter():
         print("INFO: Starting Formant JetBot Adapter")
 
         # Set global params
-        self.speed = START_SPEED
+        self.max_speed = DEFAULT_MAX_SPEED
+        self.min_speed = DEFAULT_MIN_SPEED
+        self.speed_deadzone = DEFAULT_SPEED_DEADZONE
+        self.speed_increment = DEFAULT_SPEED_INCREMENT
+        self.angular_reduction = DEFAULT_ANGULAR_REDUCTION
+        self.latitude = DEFAULT_LATITUDE
+        self.longitude = DEFAULT_LONGITUDE
+        self.gst_string = DEFAULT_GST_STRING
+        self.start_speed = DEFAULT_START_SPEED
+        self.speed = self.start_speed
+
+        # Store frame rate information to publish
+        self.camera_width = 0
+        self.camera_height = 0
+        self.camera_frame_timestamps = collections.deque([], maxlen=100)
+        self.camera_frame_sizes = collections.deque([], maxlen=100)
 
         # Create clients
         self.robot = Robot()
         self.fclient = FormantClient(ignore_throttled=True, ignore_unavailable=True)
 
+        self.update_from_app_config()
+
         self.fclient.create_event(
             "Formant JetBot adapter online",
             notify=False,
+        )
+
+        self.fclient.register_command_request_callback(
+            self.handle_command_request
         )
         
         self.fclient.register_teleop_callback(
@@ -54,6 +85,14 @@ class FormantJetBotAdapter():
         except:
             print("ERROR: Unable to start location thread")
 
+        # Create the camera stats publisher
+        try:
+            camera_stats_thread = threading.Thread(target=self.publish_camera_stats, daemon=True)
+            camera_stats_thread.start()
+            print("INFO: Camera stats thread started")
+        except:
+            print("ERROR: Unable to start camera stats thread")
+        
         # Start the camera feed
         self.publish_camera_feed()
 
@@ -63,28 +102,51 @@ class FormantJetBotAdapter():
             self.fclient.post_numericset(
                 "Speed",
                 {
-                    "speed": (self.speed + SPEED_DEADZONE, "m/s")
+                    "speed": (self.speed + self.speed_deadzone, "m/s")
                 },
             )
             time.sleep(1.0)
 
     def publish_location(self):
-        # TODO: get location input from user on setup.sh run
         while True:
             self.fclient.post_geolocation(
                 "Location", 
-                40.4585351, # Latitude
-                -79.932331  # Longitude
+                self.latitude,
+                self.longitude
             )
             time.sleep(10.0)
 
+    def publish_camera_stats(self):
+        while True:
+            length = len(self.camera_frame_timestamps)
+            if length > 1:
+                size_mean = mean(self.camera_frame_sizes)
+                size_stdev = stdev(self.camera_frame_sizes)
+                oldest = self.camera_frame_timestamps[0]
+                newest = self.camera_frame_timestamps[-1]
+                diff = newest - oldest
+                if diff > 0:
+                    hz = length / diff
+                    self.fclient.post_numericset(
+                        "Camera Statistics",
+                        {
+                            "Rate": (hz, "Hz"),
+                            "Average Size": (size_mean, "bytes"),
+                            "Std Dev": (size_stdev, "bytes"),
+                            "Width": (self.camera_width, "pixels"),
+                            "Height": (self.camera_height, "pixels")
+                        },
+                    )
+            time.sleep(5.0)
+
     def publish_camera_feed(self):
-        cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER)
+        cap = cv2.VideoCapture(self.gst_string, cv2.CAP_GSTREAMER)
         if cap is None:
             sys.exit()
 
         while True:
             _, image = cap.read()
+
             try:
                 encoded = cv2.imencode(".jpg", image)[1].tostring()
             except:
@@ -94,6 +156,41 @@ class FormantJetBotAdapter():
                 self.fclient.post_image("Camera", encoded)
             except:
                 print("ERROR: Camera ingestion failed")
+
+            # Track stats for publishing
+            self.camera_frame_timestamps.append(time.time())
+            self.camera_frame_sizes.append(len(encoded) * 3 / 4)
+            self.camera_width = image.shape[1]
+            self.camera_height = image.shape[0]
+
+    def update_from_app_config(self):
+        print("INFO: updating configuration")
+        print(self.fclient.get_config_blob_data())
+
+        self.max_speed = float(self.fclient.get_app_config("max_speed", DEFAULT_MAX_SPEED))
+        self.min_speed = float(self.fclient.get_app_config("min_speed", DEFAULT_MIN_SPEED))
+        self.speed_deadzone = float(self.fclient.get_app_config("speed_deadzone", DEFAULT_SPEED_DEADZONE))
+        self.speed_increment = float(self.fclient.get_app_config("speed_increment", DEFAULT_SPEED_INCREMENT))
+        self.angular_reduction = float(self.fclient.get_app_config("angular_reduction", DEFAULT_ANGULAR_REDUCTION))
+        self.latitude = float(self.fclient.get_app_config("latitude", DEFAULT_ANGULAR_REDUCTION))
+        self.longitude = float(self.fclient.get_app_config("longitude", DEFAULT_ANGULAR_REDUCTION))
+        self.gst_string = self.fclient.get_app_config("gst_string", DEFAULT_GST_STRING)
+        self.start_speed = float(self.fclient.get_app_config("start_speed", DEFAULT_START_SPEED))
+
+    def handle_command_request(self, request):
+        print(request)
+        if request.command == "jetbot.nudge_forward":
+            self._handle_nudge_forward()
+            self.fclient.send_command_response(request.id, success=True)
+        elif request.command == "jetbot.nudge_backward":
+            self._handle_nudge_backward()
+            self.fclient.send_command_response(request.id, success=True)
+        elif request.command == "jetbot.update_config":
+            self.update_from_app_config()
+            self.fclient.send_command_response(request.id, success=True)
+        else:
+            self.fclient.send_command_response(request.id, success=False)
+            return
 
     def handle_teleop(self, control_datapoint):
         #print("got teleop message:", control_datapoint)
@@ -108,22 +205,22 @@ class FormantJetBotAdapter():
 
         # Add contributions from the joysticks
         # TODO: turn this into a circle, not a square
-        left_motor_value += self.speed * joystick.twist.angular.z * ANGULAR_REDUCTION
-        right_motor_value += -self.speed * joystick.twist.angular.z * ANGULAR_REDUCTION
+        left_motor_value += self.speed * joystick.twist.angular.z * self.angular_reduction
+        right_motor_value += -self.speed * joystick.twist.angular.z * self.angular_reduction
 
         left_motor_value += self.speed * joystick.twist.linear.x
         right_motor_value += self.speed * joystick.twist.linear.x
 
         # Improve the deadzone
         if left_motor_value > 0:
-            left_motor_value += SPEED_DEADZONE
+            left_motor_value += self.speed_deadzone
         elif left_motor_value < 0:
-            left_motor_value -= SPEED_DEADZONE
+            left_motor_value -= self.speed_deadzone
         
         if right_motor_value > 0:
-            right_motor_value += SPEED_DEADZONE
+            right_motor_value += self.speed_deadzone
         elif right_motor_value < 0:
-            right_motor_value -= SPEED_DEADZONE
+            right_motor_value -= self.speed_deadzone
 
         # Set the motor values
         self.robot.left_motor.value = left_motor_value
@@ -167,17 +264,17 @@ class FormantJetBotAdapter():
 
     def _handle_increase_speed(self):
         self.fclient.post_text("Commands", "increase speed")
-        if self.speed + SPEED_INCREMENT <= MAX_SPEED:
-            self.speed += SPEED_INCREMENT
+        if self.speed + self.speed_increment <= self.max_speed:
+            self.speed += self.speed_increment
         else:
-            self.speed = MAX_SPEED
+            self.speed = self.max_speed
     
     def _handle_decrease_speed(self):
         self.fclient.post_text("Commands", "decrease speed")
-        if self.speed - SPEED_INCREMENT >= MIN_SPEED:
-            self.speed -= SPEED_INCREMENT
+        if self.speed - self.speed_increment >= self.min_speed:
+            self.speed -= self.speed_increment
         else:
-            self.speed = MIN_SPEED
+            self.speed = self.min_speed
 
 
 if __name__=="__main__":
