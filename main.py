@@ -1,10 +1,8 @@
 import cv2
 import time
 import random
-import logging
 import threading
 import collections
-import numpy as np
 from statistics import mean, stdev
 from jetbot import Robot, Camera, Heartbeat
 from Adafruit_MotorHAT import Adafruit_MotorHAT
@@ -55,11 +53,7 @@ class FormantJetBotAdapter():
         self.fclient = FormantClient(ignore_throttled=True, ignore_unavailable=True)
 
         self.update_from_app_config()
-
-        self.fclient.create_event(
-            "Formant JetBot adapter online",
-            notify=False,
-        )
+        self.publish_online_event()
 
         self.fclient.register_command_request_callback(
             self.handle_command_request
@@ -162,11 +156,22 @@ class FormantJetBotAdapter():
             self.camera_frame_sizes.append(len(encoded) * 3 / 4)
             self.camera_width = image.shape[1]
             self.camera_height = image.shape[0]
+        
+    def publish_online_event(self):
+        commit_hash_file = "/home/jetbot/formant-jetbot-adapter/.git/refs/heads/main"
+        with open(commit_hash_file) as f:
+            commit_hash = f.read()
+
+        self.fclient.create_event(
+            "Formant JetBot adapter online",
+            notify=False,
+            tags={
+                "hash": commit_hash.strip()
+            }
+        )
 
     def update_from_app_config(self):
         print("INFO: updating configuration")
-        print(self.fclient.get_config_blob_data())
-
         self.max_speed = float(self.fclient.get_app_config("max_speed", DEFAULT_MAX_SPEED))
         self.min_speed = float(self.fclient.get_app_config("min_speed", DEFAULT_MIN_SPEED))
         self.speed_deadzone = float(self.fclient.get_app_config("speed_deadzone", DEFAULT_SPEED_DEADZONE))
