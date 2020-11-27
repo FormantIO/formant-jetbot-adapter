@@ -18,9 +18,9 @@ DEFAULT_LATITUDE = 41.322937   # The pyramid of Enver Hoxha
 DEFAULT_LONGITUDE = 19.820896
 DEFAULT_GST_STRING = (
     "nvarguscamerasrc ! "
-    "video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)NV12, framerate=(fraction)21/1 ! "
+    "video/x-raw(memory:NVMM), width=(int)640, height=(int)480, format=(string)NV12, framerate=(fraction)30/1 ! "
     "nvvidconv ! "
-    "video/x-raw, width=(int)1280, height=(int)720, format=(string)BGRx ! "
+    "video/x-raw, width=(int)640, height=(int)480, format=(string)BGRx ! "
     "videoconvert ! "
     "appsink "
 )
@@ -71,6 +71,14 @@ class FormantJetBotAdapter():
         except:
             print("ERROR: Unable to start speed thread")
 
+         # Create the motor state publisher
+        try:
+            motor_states_thread = threading.Thread(target=self.publish_motor_states, daemon=True)
+            motor_states_thread.start()
+            print("INFO: Motor states thread started")
+        except:
+            print("ERROR: Unable to start motor states thread")
+
         # Create the location publisher
         try:
             location_thread = threading.Thread(target=self.publish_location, daemon=True)
@@ -100,6 +108,20 @@ class FormantJetBotAdapter():
                 },
             )
             time.sleep(1.0)
+    
+    def publish_motor_states(self):
+        while True:
+            self.fclient.post_numeric(
+                "Motor Speed",
+                self.robot.left_motor.value,
+                {"value": "left"}
+            )
+            self.fclient.post_numeric(
+                "Motor Speed",
+                self.robot.right.value,
+                {"value": "right"}
+            )
+            time.sleep(0.5)
 
     def publish_location(self):
         while True:
@@ -112,25 +134,29 @@ class FormantJetBotAdapter():
 
     def publish_camera_stats(self):
         while True:
-            length = len(self.camera_frame_timestamps)
-            if length > 1:
-                size_mean = mean(self.camera_frame_sizes)
-                size_stdev = stdev(self.camera_frame_sizes)
-                oldest = self.camera_frame_timestamps[0]
-                newest = self.camera_frame_timestamps[-1]
-                diff = newest - oldest
-                if diff > 0:
-                    hz = length / diff
-                    self.fclient.post_numericset(
-                        "Camera Statistics",
-                        {
-                            "Rate": (hz, "Hz"),
-                            "Average Size": (size_mean, "bytes"),
-                            "Std Dev": (size_stdev, "bytes"),
-                            "Width": (self.camera_width, "pixels"),
-                            "Height": (self.camera_height, "pixels")
-                        },
-                    )
+            try:
+                length = len(self.camera_frame_timestamps)
+                if length > 1:
+                    size_mean = mean(self.camera_frame_sizes)
+                    size_stdev = stdev(self.camera_frame_sizes)
+                    oldest = self.camera_frame_timestamps[0]
+                    newest = self.camera_frame_timestamps[-1]
+                    diff = newest - oldest
+                    if diff > 0:
+                        hz = length / diff
+                        self.fclient.post_numericset(
+                            "Camera Statistics",
+                            {
+                                "Rate": (hz, "Hz"),
+                                "Average Size": (size_mean, "bytes"),
+                                "Std Dev": (size_stdev, "bytes"),
+                                "Width": (self.camera_width, "pixels"),
+                                "Height": (self.camera_height, "pixels")
+                            },
+                        )
+            except:
+                print("ERROR: camera stats publishing failed")
+
             time.sleep(5.0)
 
     def publish_camera_feed(self):
