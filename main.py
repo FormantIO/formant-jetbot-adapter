@@ -8,7 +8,10 @@ from jetbot import Robot, Camera, Heartbeat, ADS1115, INA219
 from Adafruit_MotorHAT import Adafruit_MotorHAT
 from formant.sdk.agent.v1 import Client as FormantClient
 
-MAX_VOLTAGE = 12.6
+MAX_CHARGING_VOLTAGE = 12.6
+MIN_CHARGING_VOLTAGE = 11.0
+MAX_DISCHARGING_VOLTAGE = 12.1
+MIN_DISCHARGING_VOLTAGE = 10.0
 DEFAULT_MAX_SPEED = 0.7
 DEFAULT_MIN_SPEED = 0.1
 DEFAULT_START_SPEED = 0.1
@@ -148,48 +151,66 @@ class FormantJetBotAdapter():
             shunt_voltage = self.ina219.getShuntVoltage_mV() / 1000
             current = self.ina219.getCurrent_mA() / 1000
             psu_voltage = bus_voltage + shunt_voltage
-            charge_percentage = bus_voltage / MAX_VOLTAGE
 
-            print("psu voltage:", psu_voltage)
-            print("shunt voltage:", shunt_voltage)
-            print("load voltage:", bus_voltage)
-            print("current:", current)
-            print("===")
-        
+            charging = False
+            if shunt_voltage > 0.01 and current > 0.01:
+                charging = True
+
+            # Try to do an ok job at battery charge percentage calibration
+            now = (bus_voltage - MIN_DISCHARGING_VOLTAGE)
+            full = (MAX_DISCHARGING_VOLTAGE - MIN_DISCHARGING_VOLTAGE)
+            charge_percentage = now / full * 100
+            if charging:
+                now = (bus_voltage - MIN_CHARGING_VOLTAGE)
+                full = (MAX_CHARGING_VOLTAGE - MIN_CHARGING_VOLTAGE)
+                charge_percentage = now / full * 100
+            
+            if charge_percentage >= 100:
+                charge_percentage = 100
+
             self.fclient.post_battery(
                 "Battery State",
                 charge_percentage,
                 voltage=bus_voltage,
                 current=current
             )
+
+            self.fclient.post_bitset(
+                "Battery Charging",
+                {
+                    "charging": charging,
+                    "discharging": not charging
+                }
+            )
+
             time.sleep(1.0)
 
     def publish_camera_stats(self):
         while True:
-            # try:
-            length = len(self.camera_frame_timestamps)
-            if length > 2:
-                size_mean = mean(self.camera_frame_sizes)
-                size_stdev = stdev(self.camera_frame_sizes)
-                jitter = self.calculate_jitter(self.camera_frame_timestamps)
-                oldest = self.camera_frame_timestamps[0]
-                newest = self.camera_frame_timestamps[-1]
-                diff = newest - oldest
-                if diff > 0:
-                    hz = length / diff
-                    self.fclient.post_numericset(
-                        "Camera Statistics",
-                        {
-                            "Rate": (hz, "Hz"),
-                            "Mean Size": (size_mean, "bytes"),
-                            "Std Dev": (size_stdev, "bytes"),
-                            "Mean Jitter": (jitter, "ms"),
-                            "Width": (self.camera_width, "pixels"),
-                            "Height": (self.camera_height, "pixels")
-                        },
-                    )
-            # except:
-            #     print("ERROR: camera stats publishing failed")
+            try:
+                length = len(self.camera_frame_timestamps)
+                if length > 2:
+                    size_mean = mean(self.camera_frame_sizes)
+                    size_stdev = stdev(self.camera_frame_sizes)
+                    jitter = self.calculate_jitter(self.camera_frame_timestamps)
+                    oldest = self.camera_frame_timestamps[0]
+                    newest = self.camera_frame_timestamps[-1]
+                    diff = newest - oldest
+                    if diff > 0:
+                        hz = length / diff
+                        self.fclient.post_numericset(
+                            "Camera Statistics",
+                            {
+                                "Rate": (hz, "Hz"),
+                                "Mean Size": (size_mean, "bytes"),
+                                "Std Dev": (size_stdev, "bytes"),
+                                "Mean Jitter": (jitter, "ms"),
+                                "Width": (self.camera_width, "pixels"),
+                                "Height": (self.camera_height, "pixels")
+                            },
+                        )
+            except:
+                print("ERROR: camera stats publishing failed")
 
             time.sleep(5.0)
 
