@@ -51,7 +51,11 @@ sudo formant-jetbot-adapter/setup.sh
 ```
 
 ### Set reboot permissions (optional)
-To use the `reboot.sh` and `update.sh` scripts via Formant commands, the following directive must be added to the sudoers file using `sudo visudo`:
+To use the `reboot.sh` and `update.sh` scripts via Formant commands, the following directive must be added to the sudoers file. To edit the sudoers, run:
+```
+sudo visudo
+```
+...and add the line:
 ```
 formant  ALL=NOPASSWD:/sbin/reboot
 ```
@@ -76,4 +80,4 @@ The following configuration parameters can be set via Application Configuration:
 | `angular_reduction` | `0.50` | The amount to reduce turning speed relative to linear speed |
 | `latitude` | `41.322937` | The latitude to publish |
 | `longitude` | `19.820896` | The longitude to publish |
-| `gst_string` | `nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)NV12, framerate=(fraction)21/1 ! nvvidconv ! video/x-raw, width=(int)1280, height=(int)720, format=(string)BGRx ! videoconvert ! appsink` | The string to use for GStreamer |
+| `gst_string` | `nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)640, height=(int)480, format=(string)NV12, framerate=(fraction)30/1 ! nvvidconv ! video/x-raw, width=(int)640, height=(int)480, format=(string)BGRx ! videoconvert ! appsink` | The string to use for GStreamer |
