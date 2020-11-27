@@ -118,7 +118,7 @@ class FormantJetBotAdapter():
             )
             self.fclient.post_numeric(
                 "Motor Speed",
-                self.robot.right.value,
+                self.robot.right_motor.value,
                 {"value": "right"}
             )
             time.sleep(0.5)
