@@ -4,10 +4,11 @@ import random
 import threading
 import collections
 from statistics import mean, stdev
-from jetbot import Robot, Camera, Heartbeat
+from jetbot import Robot, Camera, Heartbeat, ADS1115, INA219
 from Adafruit_MotorHAT import Adafruit_MotorHAT
 from formant.sdk.agent.v1 import Client as FormantClient
 
+MAX_VOLTAGE = 12.6
 DEFAULT_MAX_SPEED = 0.7
 DEFAULT_MIN_SPEED = 0.1
 DEFAULT_START_SPEED = 0.1
@@ -50,6 +51,7 @@ class FormantJetBotAdapter():
 
         # Create clients
         self.robot = Robot()
+        self.ina219 = INA219(addr=0x41)
         self.fclient = FormantClient(ignore_throttled=True, ignore_unavailable=True)
 
         self.update_from_app_config()
@@ -86,6 +88,14 @@ class FormantJetBotAdapter():
             print("INFO: Location thread started")
         except:
             print("ERROR: Unable to start location thread")
+
+        # Create the battery state publisher
+        try:
+            battery_state_thread = threading.Thread(target=self.publish_battery_state, daemon=True)
+            battery_state_thread.start()
+            print("INFO: Battery state thread started")
+        except:
+            print("ERROR: Unable to start battery state thread")
 
         # Create the camera stats publisher
         try:
@@ -132,30 +142,54 @@ class FormantJetBotAdapter():
             )
             time.sleep(10.0)
 
+    def publish_battery_state(self):
+        while True:
+            bus_voltage = self.ina219.getBusVoltage_V()
+            shunt_voltage = self.ina219.getShuntVoltage_mV() / 1000
+            current = self.ina219.getCurrent_mA() / 1000
+            psu_voltage = bus_voltage + shunt_voltage
+            charge_percentage = bus_voltage / MAX_VOLTAGE
+
+            print("psu voltage:", psu_voltage)
+            print("shunt voltage:", shunt_voltage)
+            print("load voltage:", bus_voltage)
+            print("current:", current)
+            print("===")
+        
+            self.fclient.post_battery(
+                "Battery State",
+                charge_percentage,
+                voltage=bus_voltage,
+                current=current
+            )
+            time.sleep(1.0)
+
     def publish_camera_stats(self):
         while True:
-            try:
-                length = len(self.camera_frame_timestamps)
-                if length > 1:
-                    size_mean = mean(self.camera_frame_sizes)
-                    size_stdev = stdev(self.camera_frame_sizes)
-                    oldest = self.camera_frame_timestamps[0]
-                    newest = self.camera_frame_timestamps[-1]
-                    diff = newest - oldest
-                    if diff > 0:
-                        hz = length / diff
-                        self.fclient.post_numericset(
-                            "Camera Statistics",
-                            {
-                                "Rate": (hz, "Hz"),
-                                "Average Size": (size_mean, "bytes"),
-                                "Std Dev": (size_stdev, "bytes"),
-                                "Width": (self.camera_width, "pixels"),
-                                "Height": (self.camera_height, "pixels")
-                            },
-                        )
-            except:
-                print("ERROR: camera stats publishing failed")
+            # try:
+            length = len(self.camera_frame_timestamps)
+            if length > 2:
+                size_mean = mean(self.camera_frame_sizes)
+                size_stdev = stdev(self.camera_frame_sizes)
+                jitter = self.calculate_jitter(self.camera_frame_timestamps)
+                oldest = self.camera_frame_timestamps[0]
+                newest = self.camera_frame_timestamps[-1]
+                diff = newest - oldest
+                if diff > 0:
+                    hz = length / diff
+                    self.fclient.post_numericset(
+                        "Camera Statistics",
+                        {
+                            "Rate": (hz, "Hz"),
+                            "Mean Size": (size_mean, "bytes"),
+                            "Std Dev": (size_stdev, "bytes"),
+                            "Mean Jitter": (jitter, "ms"),
+                            "Width": (self.camera_width, "pixels"),
+                            "Height": (self.camera_height, "pixels")
+                        },
+                    )
+            # except:
+            #     print("ERROR: camera stats publishing failed")
 
             time.sleep(5.0)
 
@@ -169,20 +203,16 @@ class FormantJetBotAdapter():
 
             try:
                 encoded = cv2.imencode(".jpg", image)[1].tostring()
+                self.fclient.post_image("Camera", encoded)
+
+                # Track stats for publishing
+                self.camera_frame_timestamps.append(time.time())
+                self.camera_frame_sizes.append(len(encoded) * 3 / 4)
+                self.camera_width = image.shape[1]
+                self.camera_height = image.shape[0]
             except:
                 print("ERROR: Encoding failed")
-            
-            try:
-                self.fclient.post_image("Camera", encoded)
-            except:
-                print("ERROR: Camera ingestion failed")
 
-            # Track stats for publishing
-            self.camera_frame_timestamps.append(time.time())
-            self.camera_frame_sizes.append(len(encoded) * 3 / 4)
-            self.camera_width = image.shape[1]
-            self.camera_height = image.shape[0]
-        
     def publish_online_event(self):
         commit_hash_file = "/home/jetbot/formant-jetbot-adapter/.git/refs/heads/main"
         with open(commit_hash_file) as f:
@@ -306,6 +336,21 @@ class FormantJetBotAdapter():
             self.speed -= self.speed_increment
         else:
             self.speed = self.min_speed
+
+    def calculate_jitter(self, timestamps):
+        length = len(self.camera_frame_timestamps)
+        oldest = self.camera_frame_timestamps[0]
+        newest = self.camera_frame_timestamps[-1]
+        step_value = (newest - oldest) / length
+
+        # Make a list of the difference between the expected and actual step sizes
+        jitters = []
+        for n in range(length - 1):
+            if n > 0:
+                jitter = abs((timestamps[n] - timestamps[n-1]) - step_value)
+                jitters.append(jitter)
+    
+        return mean(jitters)
 
 
 if __name__=="__main__":

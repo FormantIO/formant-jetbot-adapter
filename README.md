@@ -16,6 +16,15 @@ This package uses the JetBot base image.
 
 Follow steps 1, 2, and 3 here: https://github.com/NVIDIA-AI-IOT/jetbot/wiki/software-setup
 
+STOP after step 3. This adapter uses the `waveshare/jetbot` repo, not the `NVIDIA-AI-IOT/jetbot` repo as those instructions specify. This allows us to pull information about the battery.
+
+### Install the jetbot code repository
+```
+cd && git clone https://github.com/waveshare/jetbot.git
+cd jetbot
+sudo python3 setup.py install
+```
+
 ### Install the Formant agent
 The agent should be installed before the adapter setup script is run.
 
