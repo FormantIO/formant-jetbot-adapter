@@ -228,10 +228,10 @@ class FormantJetBotAdapter:
             self.fclient.get_app_config("angular_reduction", DEFAULT_ANGULAR_REDUCTION)
         )
         self.latitude = float(
-            self.fclient.get_app_config("latitude", DEFAULT_ANGULAR_REDUCTION)
+            self.fclient.get_app_config("latitude", DEFAULT_LATITUDE)
         )
         self.longitude = float(
-            self.fclient.get_app_config("longitude", DEFAULT_ANGULAR_REDUCTION)
+            self.fclient.get_app_config("longitude", DEFAULT_LONGITUDE)
         )
         self.gst_string = self.fclient.get_app_config("gst_string", DEFAULT_GST_STRING)
         self.start_speed = float(
