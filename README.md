@@ -60,6 +60,16 @@ sudo visudo
 formant  ALL=NOPASSWD:/sbin/reboot
 ```
 
+## Commands
+The following commands can be used with the adapter:
+| Name | Description |
+|------------------------|--------------------|--------------------|
+| `reboot jetbot` | Runs the `reboot.sh` script to restart the jetbot |
+| `update jetbot` | Runs the `update.sh` script to pull changes from the main branch of this code repository rand restart |
+| `update config` | Refreshes the configuration from app config without rebooting |
+| `nudge forward` | Moves the robot forward for 500ms |
+| `nudge backward` | Moves the robot backward for 500ms |
+
 ## Configuration
 
 ### Set a location
