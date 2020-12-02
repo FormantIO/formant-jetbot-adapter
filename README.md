@@ -43,7 +43,7 @@ Follow the provided instructions to walk through the installation and provisioni
 ### Install the Formant JetBot Adapter
 Once the JetBot image is installed, on wifi, updated, and connected to Formant, clone this repository to your home directory:
 ```
-cd && git clone git@github.com:FormantIO/formant-jetbot-adapter.git
+cd && git clone https://github.com/FormantIO/formant-jetbot-adapter.git
 ```
 Run the setup script:
 ```
