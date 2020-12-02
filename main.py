@@ -179,14 +179,17 @@ class FormantJetBotAdapter:
         while not self.is_shutdown:
             _, image = cap.read()
 
-            encoded = cv2.imencode(".jpg", image)[1].tostring()
-            self.fclient.post_image("Camera", encoded)
+            try:
+                encoded = cv2.imencode(".jpg", image)[1].tostring()
+                self.fclient.post_image("Camera", encoded)
 
-            # Track stats for publishing
-            self.camera_frame_timestamps.append(time.time())
-            self.camera_frame_sizes.append(len(encoded) * 3 / 4)
-            self.camera_width = image.shape[1]
-            self.camera_height = image.shape[0]
+                # Track stats for publishing
+                self.camera_frame_timestamps.append(time.time())
+                self.camera_frame_sizes.append(len(encoded) * 3 / 4)
+                self.camera_width = image.shape[1]
+                self.camera_height = image.shape[0]
+            except:
+                print("ERROR: encoding failed")
 
     def publish_online_event(self):
         try:
