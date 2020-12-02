@@ -45,7 +45,7 @@ Once the JetBot image is installed, on wifi, updated, and connected to Formant, 
 ```
 cd && git clone https://github.com/FormantIO/formant-jetbot-adapter.git
 ```
-Run the setup script:
+Run the setup script (this could take a very long time while building `grpcio`):
 ```
 sudo formant-jetbot-adapter/setup.sh
 ```
