@@ -60,6 +60,16 @@ sudo visudo
 formant  ALL=NOPASSWD:/sbin/reboot
 ```
 
+## Commands
+The following commands can be used with the adapter:
+| Name | Description |
+|------------------------|--------------------|
+| `reboot jetbot` | Runs the `reboot.sh` script to restart the jetbot |
+| `update jetbot` | Runs the `update.sh` script to pull changes from the main branch of this code repository rand restart |
+| `update config` | Refreshes the configuration from app config without rebooting |
+| `nudge forward` | Moves the robot forward for 500ms |
+| `nudge backward` | Moves the robot backward for 500ms |
+
 ## Configuration
 
 ### Set a location
@@ -68,7 +78,7 @@ The JetBot devices don't ship with a GPS module, but the device will publish a c
 To set this location, go to the device's configuration page in Formant, and find the `Application Configuration` section. Create two new configuration parameters: `latitude` and `longitude`, and set them to your desired location (in decimal notation).
 
 ### Configuration parameters and defaults
-The following configuration parameters can be set via Application Configuration:
+Default configuration values can be overridden with agent application configuration variables. The `udpdate config` command must be run or the adapter must be restarted to pick up changes. The following configuration parameters can be set via Application Configuration:
 
 | Name | Default Value | Description |
 |------------------------|--------------------|--------------------|
