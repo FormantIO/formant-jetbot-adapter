@@ -41,7 +41,7 @@ Click on `Show advanced settings` and select the following:
 Follow the provided instructions to walk through the installation and provisioning process. Do not set a Catkin workspace if asked.
 
 ### Install the Formant JetBot Adapter
-Once the JetBot image is installed, on wifi, updated, and connected to Formant, clone this repository to your home directory:
+Once the JetBot image is installed, on wifi, updated, and connected to Formant, run this script to clone this repository to your home directory:
 ```
 cd && git clone https://github.com/FormantIO/formant-jetbot-adapter.git
 ```
