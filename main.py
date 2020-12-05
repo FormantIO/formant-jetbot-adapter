@@ -147,13 +147,20 @@ class FormantJetBotAdapter:
 
     def publish_camera_stats(self):
         while not self.is_shutdown:
-            length = len(self.camera_frame_timestamps)
+            try:
+                timestamps = list(self.camera_frame_timestamps)
+                sizes = list(self.camera_frame_sizes)
+            except:
+                print("ERROR: deque mutated while iterating")
+                pass
+
+            length = len(timestamps)
             if length > 2:
-                size_mean = mean(self.camera_frame_sizes)
-                size_stdev = stdev(self.camera_frame_sizes)
-                jitter = self.calculate_jitter(self.camera_frame_timestamps)
-                oldest = self.camera_frame_timestamps[0]
-                newest = self.camera_frame_timestamps[-1]
+                size_mean = mean(sizes)
+                size_stdev = stdev(sizes)
+                jitter = self.calculate_jitter(timestamps)
+                oldest = timestamps[0]
+                newest = timestamps[-1]
                 diff = newest - oldest
                 if diff > 0:
                     hz = length / diff
@@ -293,10 +300,6 @@ class FormantJetBotAdapter:
             self._handle_nudge_forward()
         elif _.bitset.bits[0].key == "nudge backward":
             self._handle_nudge_backward()
-        elif _.bitset.bits[0].key == "start":
-            self._handle_start()
-        elif _.bitset.bits[0].key == "stop":
-            self._handle_stop()
         elif _.bitset.bits[0].key == "speed +":
             self._handle_increase_speed()
         elif _.bitset.bits[0].key == "speed -":
@@ -304,22 +307,14 @@ class FormantJetBotAdapter:
 
     def _handle_nudge_forward(self):
         self.fclient.post_text("Commands", "nudge forward")
-        self.robot.forward(self.speed)
+        self.robot.forward(self.speed + self.speed_deadzone)
         time.sleep(0.5)
         self.robot.stop()
 
     def _handle_nudge_backward(self):
         self.fclient.post_text("Commands", "nudge backward")
-        self.robot.backward(self.speed)
+        self.robot.backward(self.speed + self.speed_deadzone)
         time.sleep(0.5)
-        self.robot.stop()
-
-    def _handle_start(self):
-        self.fclient.post_text("Commands", "start")
-        self.robot.forward(self.speed)
-
-    def _handle_stop(self):
-        self.fclient.post_text("Commands", "stop")
         self.robot.stop()
 
     def _handle_increase_speed(self):
