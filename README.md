@@ -1,13 +1,17 @@
 # Formant JetBot Adapter
-This adapter will connect a JetBot's interfaces to the Formant Agent so that it can record telemetry and be teleoperated.
+This adapter will connect a JetBot to the Formant Agent so that it can record telemetry and be teleoperated.
 
-Never leave a robot in a situation where someone's unexpected teleoperation inputs can send it flying off of a table.
+The JetBot is a small robot kit that pairs an NVIDIA Jetson Nano on-board computer with basic mobile robot components in order to create a simple system that can be used for research and eudcation purposes.
+
+[Formant](https://formant.io) is a robot data and operations platform that allows companies to remotely manage all aspects of deployed systems, teleoperate them, and collect and analyze the sensor and telemetry data. It will be used here to remotely operate the JetBot.
+
+**WARNING:** Never leave a robot in a situation where someone's unexpected teleoperation inputs can send it flying off of a table.
 
 ## Hardware
 | Item | Price |
 |------|-------|
-| [Waveshare JetBot Kit](https://www.amazon.com/Waveshare-JetBot-AI-Kit-Intelligent/dp/B07V8JL4TF/) | $240.99 |
-| [18650 Batteries (with bonus flashlight)](https://www.amazon.com/Tactical-Flashlight-Rechargeable-Batteries-Resistant/dp/B07SQLRMQH/) | $20.97 |
+| [Waveshare JetBot Kit](https://www.amazon.com/Waveshare-JetBot-AI-Kit-Intelligent/dp/B07V8JL4TF/) | $238.99 |
+| [18650 Batteries (with bonus flashlight)](https://www.amazon.com/Tactical-Flashlight-Rechargeable-Batteries-Resistant/dp/B07SQLRMQH/) | $18.98 |
 
 ## Setup
 
@@ -35,7 +39,7 @@ Name the device `jetbot.xyz` where `xyz` is an unused three-digit number.
 Click on `Show advanced settings` and select the following:
 | Name                   | Value              |
 |------------------------|--------------------|
-| Tags                   | `hardware: jetbot` |
+| Tags                   | `type: jetbot` |
 | Configuration Template | `jetbot`           |
 
 Follow the provided instructions to walk through the installation and provisioning process. Do not set a Catkin workspace if asked.
@@ -88,6 +92,4 @@ Default configuration values can be overridden with agent application configurat
 | `speed_deadzone` | `0.25` | The baseline value to be added to the motors to reduce the deadzone |
 | `speed_increment` | `0.025` | The amount that `speed +` and `speed -` affect the speed |
 | `angular_reduction` | `0.50` | The amount to reduce turning speed relative to linear speed |
-| `latitude` | `41.322937` | The latitude to publish |
-| `longitude` | `19.820896` | The longitude to publish |
 | `gst_string` | `nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)640, height=(int)480, format=(string)NV12, framerate=(fraction)30/1 ! nvvidconv ! video/x-raw, width=(int)640, height=(int)480, format=(string)BGRx ! videoconvert ! appsink` | The string to use for GStreamer |
