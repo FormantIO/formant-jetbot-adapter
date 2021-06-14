@@ -2,7 +2,6 @@ Description=Runs the formant jetbot adapter
 
 [Service]
 Type=simple
-User=jetbot
 ExecStart=/home/jetbot/formant-jetbot-adapter/start.sh
 WorkingDirectory=/home/jetbot
 Restart=always
