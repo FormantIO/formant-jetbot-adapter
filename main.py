@@ -4,8 +4,8 @@ import threading
 import collections
 from statistics import mean, stdev
 
-import cv2
 from formant.sdk.agent.v1 import Client as FormantClient
+import cv2
 
 from jetbot import Robot, INA219
 
